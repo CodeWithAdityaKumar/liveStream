@@ -1,85 +1,114 @@
-const express = require('express');
-const { exec, spawn } = require("child_process");
-
+import express from 'express';
+import { spawn } from 'child_process';
+import path from 'path';
+import dotenv from 'dotenv';
+dotenv.config();
 const app = express()
+const PORT = process.env.PORT || 8000;
 
-let process = null;
 
-app.get("/api/stream/start",(req, res) => {
+
+app.use(express.json()); // For JSON payloads
+app.use(express.urlencoded({ extended: true })); // For URL-encoded payloads
+
+
+app.set("view engine", "ejs");
+app.use(express.static("public"));
+
+
+let FFMPEGProcess = null;
+
+app.post("/api/stream/start", (req, res) => {
     
+    let { videoURL, StreamKey, AppStreamKey, loop } = req.body;
 
-    // const videoURL = "./video3.mp4";
-    const videoURL =
-      "https://firebasestorage.googleapis.com/v0/b/akmovies4upro-8a87e.appspot.com/o/videos%2Fvideo3.mp4?alt=media&token=5538fc67-1f09-4b32-8633-b0d0c8494e25";
-    const StreamKey = "9tgp-g1ta-a7mq-cy6a-00p0";
+    if (loop == "no") {
+        loop = false;
+    } else {
+        loop = true
+    }
 
-    const loop = true;
-    const title = "demo title from server";
-    const desc = "demo description from server";
+    console.log(videoURL, StreamKey, AppStreamKey, loop);
 
-    const command = [
-      "-re",
-      "-stream_loop",
-      loop ? -1 : 0,
-      "-i",
-      videoURL,
-      "-f",
-      "flv",
-      `rtmp://a.rtmp.youtube.com/live2/${StreamKey}`,
-    ];
-    
-    
-    
-    
-    // const command = `ffmpeg -re -stream_loop ${
-    //   loop ? -1 : 0
-    // } -i "${videoURL}" -metadata title="${title}" -metadata comment="${desc}" -f flv rtmp://a.rtmp.youtube.com/live2/${StreamKey}`;
 
-    // process = exec(command);
-    process = spawn("ffmpeg",command);
+    if (AppStreamKey == process.env.AppStreamKey) {
+      const command = [
+        "-re",
+        "-stream_loop",
+        loop ? -1 : 0,
+        "-i",
+        videoURL,
+        "-f",
+        "flv",
+        `rtmp://a.rtmp.youtube.com/live2/${StreamKey}`,
+      ];
+      FFMPEGProcess = spawn("ffmpeg", command);
 
-    console.log(process.pid);
-    // 13184;
-    
-
-    process.stdout.on("data", (data) => {
-      console.log(data);
-    });
-    process.stderr.on("data", (data) => {
-      console.error(data);
-    });
-    process.on("close", (code) => {
+      FFMPEGProcess.stdout.on("data", (data) => {
+        console.log(data);
+      });
+      FFMPEGProcess.stderr.on("data", (data) => {
+        console.error(data);
+      });
+      FFMPEGProcess.on("close", (code) => {
         console.log(`FFMPEG process exited with code ${code}`);
-        
-    });
-    
-    res.send("Stream Started...")
+      });
+
+        // res.send("Stream Started...");
+        res.redirect(`/pages/stream`);
+    } else {
+        res.status(400).send("Invalid Key");
+    }
 
 })
 
-app.get("/api/stream/stop", (req, res) => {
-    if (process) {
-        process.kill("SIGTERM");
-        process = null;
+app.post("/api/stream/stop", (req, res) => {
+    const { AppStreamKey } = req.body;
+    // const {key} = req.body
 
-        // exec("pkill -f ffmpeg", (err) => {
-        //     console.error("Error Stopping FFMPEG Processes", err);
-        //     return res.status(400).send("Failed to stop ffmpeg processes")
-        //     process = null;
-            
-        // })
-
-        res.send("Stream Stopped...")
+    if (FFMPEGProcess) {
+      if (AppStreamKey == process.env.AppStreamKey) {
+        FFMPEGProcess.kill("SIGTERM");
+        FFMPEGProcess = null;
+          // res.send("Stream Stopped...");
+          res.redirect(`/pages/stream`);
+      } else {
+        res.status(400).send("Invalid Key");
+      }
     } else {
-        res.status(400).send("No stream is running.")
+      res.status(400).send("No stream is running.");
     }
 })
-
-app.get("/", (req, res) => {
-    res.send("hoiiiii")
+app.get("/", (_, res) => {
+    res.send("hiiiii")
 })
 
-app.listen(3000, (err) => {
-    console.log("Server Is running");
-    
+app.get("/pages/upload", (_, res) => {
+    res.render("Upload", {
+      ApiKey: process.env.apiKey,
+      AuthDomain: process.env.authDomain,
+      DatabaseURL: process.env.databaseURL,
+      ProjectId: process.env.projectId,
+      StorageBucket: process.env.storageBucket,
+      MessagingSenderId: process.env.messagingSenderId,
+      AppId: process.env.appId,
+    });
 })
+
+app.get("/pages/stream", (_, res) => {
+
+    let isStreaming = false
+
+    if (FFMPEGProcess) {
+        isStreaming = true;
+    } else {
+        isStreaming = false
+    }
+        res.render("Home", {isStreaming});
+
+})
+
+
+app.listen(PORT, () => {
+  console.log("Server Is running");
+});

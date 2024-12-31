@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Platform - Home</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+        <h2 class="text-2xl font-bold mb-6 text-center">Stream Platform</h2>
+        
+        <!-- Status Indicator -->
+        <div class="mb-6 text-center">
+            <% if (isStreaming) { %>
+                <span class="text-green-500 font-bold">Streaming is currently active</span>
+            <% } else { %>
+                <span class="text-red-500 font-bold">No active stream</span>
+            <% } %>
+        </div>
+
+        <form action="http://localhost:8000/api/stream/start" method="POST">
+            <div class="mb-4">
+                <label for="videoURL" class="block text-gray-700 font-bold mb-2">Video URL</label>
+                <input type="url" id="videoURL" name="videoURL" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            <div class="mb-4">
+                <label for="streamKey" class="block text-gray-700 font-bold mb-2">Stream Key</label>
+                <input type="text" id="streamKey" name="StreamKey" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            <div class="mb-4">
+                <label for="appStreamKey" class="block text-gray-700 font-bold mb-2">App Stream Key</label>
+                <input type="text" id="appStreamKey" name="AppStreamKey" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            <div class="mb-4">
+                <span class="block text-gray-700 font-bold mb-2">Is Loop</span>
+                <div class="flex items-center">
+                    <input type="radio" id="isLoopYes" name="isLoop" value="yes" class="mr-2">
+                    <label for="isLoopYes" class="mr-4">Yes</label>
+                    <input type="radio" id="isLoopNo" name="isLoop" value="no" class="mr-2">
+                    <label for="isLoopNo">No</label>
+                </div>
+            </div>
+            <div class="text-center">
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Start Stream</button>
+            </div>
+        </form>
+        <form action="/api/stream/stop" method="POST" class="mt-4">
+            <div class="mb-4">
+                <label for="stopKey" class="block text-gray-700 font-bold mb-2">Stop Key</label>
+                <input type="text" id="stopKey" name="AppStreamKey" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            <div class="text-center">
+                <button type="submit" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500">Stop Stream</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

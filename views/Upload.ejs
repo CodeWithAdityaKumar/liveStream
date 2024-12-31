@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Platform - Upload</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+        <h2 class="text-2xl font-bold mb-6 text-center">Upload Video</h2>
+        <form action="/upload" id="uploadForm" method="POST" enctype="multipart/form-data">
+            <div class="mb-4">
+                <label for="videoTitle" class="block text-gray-700 font-bold mb-2">Video Title</label>
+                <input type="text" id="videoTitle" name="videoTitle" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            <div class="mb-4">
+                <label for="videoFile" class="block text-gray-700 font-bold mb-2">Upload Video</label>
+                <input type="file" id="videoFile" name="videoFile" accept="video/*" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+
+            <div class="mb-4">
+                <label for="thumbnailFile" class="block text-gray-700 font-bold mb-2">Upload Thumbnail</label>
+                <input type="file" id="thumbnailFile" name="thumbnailFile" accept="image/*"
+                    class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+
+            <div class="mb-4" id="videoPreviewContainer">
+                <video id="videoPreview" class="w-full rounded-lg mb-4" controls style="display: none;"></video>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 font-bold mb-2">Upload Progress: <span id="uploadProgress">0%</span></label>
+                <label class="block text-gray-700 font-bold mb-2">Size: <span id="uploadedSize">0</span>/<span id="videoSize">0</span> MB</label>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="bg-blue-500 h-2.5 rounded-full" id="progressBar" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="text-center mb-4">
+                <button type="submit" id="uploadButton" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Upload Video</button>
+            </div>
+            
+        </form>
+        <div id="videoList" class="mt-8">
+            <h3 class="text-xl font-bold mb-4">Uploaded Videos</h3>
+            <ul id="videoListContainer" class="space-y-4"></ul>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+   <script>
+        var firebaseConfig = {
+            apiKey: "<%= ApiKey %>",
+            authDomain: "<%= AuthDomain %>",
+            databaseURL: "<%=DatabaseURL%>",
+
+            projectId: "<%= ProjectId %>",
+            storageBucket: "<%= StorageBucket %>",
+            messagingSenderId: "<%= MessagingSenderId %>",
+            appId: "<%= AppId %>"
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        const uploadForm = document.getElementById('uploadForm');
+        const videoTitle = document.getElementById('videoTitle');
+        const videoFileInput = document.getElementById('videoFile');
+        const thumbnailFileInput = document.getElementById('thumbnailFile');
+        const videoPreview = document.getElementById('videoPreview');
+        const progressBar = document.getElementById('progressBar');
+        const videoSizeLabel = document.getElementById('videoSize');
+        const uploadedSizeLabel = document.getElementById('uploadedSize');
+        const uploadProgressLabel = document.getElementById('uploadProgress');
+        const uploadButton = document.getElementById('uploadButton');
+        const videoListContainer = document.getElementById('videoListContainer');
+        const videoPreviewContainer = document.getElementById('videoPreviewContainer');
+
+        videoFileInput.addEventListener('change', () => {
+            const file = videoFileInput.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                videoPreview.src = url;
+                videoPreview.style.display = 'block';
+            } else {
+                videoPreview.style.display = 'none';
+            }
+        });
+
+        uploadForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const videoFile = videoFileInput.files[0];
+            const thumbnailFile = thumbnailFileInput.files[0];
+            if (!videoFile || !thumbnailFile) return;
+
+            const videoStorageRef = firebase.storage().ref('videos/' + videoTitle.value + '_' + videoFile.name);
+            const thumbnailStorageRef = firebase.storage().ref('thumbnails/' + videoTitle.value + '_' + thumbnailFile.name);
+
+            const videoUploadTask = videoStorageRef.put(videoFile);
+            const thumbnailUploadTask = thumbnailStorageRef.put(thumbnailFile);
+
+            videoUploadTask.on('state_changed', (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                progressBar.style.width = progress + '%';
+                uploadProgressLabel.textContent = progress.toFixed(2) + '%';
+
+                const videoSizeMB = (snapshot.totalBytes / (1024 * 1024)).toFixed(2);
+                videoSizeLabel.textContent = videoSizeMB;
+
+                const uploadedSizeMB = (snapshot.bytesTransferred / (1024 * 1024)).toFixed(2);
+                uploadedSizeLabel.textContent = uploadedSizeMB;
+            }, (error) => {
+                console.error('Upload failed:', error);
+            }, () => {
+                videoUploadTask.snapshot.ref.getDownloadURL().then((videoURL) => {
+                    thumbnailUploadTask.snapshot.ref.getDownloadURL().then((thumbnailURL) => {
+                        const videoData = {
+                            title: videoTitle.value,
+                            videoURL: videoURL,
+                            thumbnailURL: thumbnailURL
+                        };
+                        firebase.database().ref('videos').push(videoData);
+                        uploadButton.disabled = false;
+                        addVideoToList(videoData);
+                    });
+                });
+            });
+        });
+
+        function addVideoToList(videoData) {
+            const li = document.createElement('li');
+            li.className = 'flex items-center space-x-4';
+            li.innerHTML = `
+                <img src="${videoData.thumbnailURL}" class="w-24 h-24 rounded-lg" alt="Thumbnail">
+                <div class="flex-1">
+                    <h4 class="font-bold">${videoData.title}</h4>
+                    <button class="bg-blue-500 text-white px-2 py-1 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500" onclick="copyToClipboard('${videoData.videoURL}')">Copy Link</button>
+                </div>
+            `;
+            videoListContainer.appendChild(li);
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Link copied to clipboard');
+            }).catch((err) => {
+                console.error('Could not copy text: ', err);
+            });
+        }
+
+        function loadVideos() {
+            firebase.database().ref('videos').on('value', (snapshot) => {
+                videoListContainer.innerHTML = '';
+                snapshot.forEach((childSnapshot) => {
+                    const videoData = childSnapshot.val();
+                    addVideoToList(videoData);
+                });
+            });
+        }
+
+        loadVideos();
+   </script>
+</body>
+</html>
