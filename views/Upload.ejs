@@ -5,159 +5,241 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stream Platform - Upload</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .drop-zone {
+            border: 2px dashed #d1d5db;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+        .drop-zone.dragover {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen">
     <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
         <h2 class="text-2xl font-bold mb-6 text-center">Upload Video</h2>
-        <form action="/upload" id="uploadForm" method="POST" enctype="multipart/form-data">
+        <form action="/api/upload" id="uploadForm" method="POST" enctype="multipart/form-data">
             <div class="mb-4">
                 <label for="videoTitle" class="block text-gray-700 font-bold mb-2">Video Title</label>
-                <input type="text" id="videoTitle" name="videoTitle" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-            </div>
-            <div class="mb-4">
-                <label for="videoFile" class="block text-gray-700 font-bold mb-2">Upload Video</label>
-                <input type="file" id="videoFile" name="videoFile" accept="video/*" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                <input type="text" id="videoTitle" name="videoTitle" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="My awesome video" required>
             </div>
 
+            <!-- Video File Drop Zone -->
             <div class="mb-4">
-                <label for="thumbnailFile" class="block text-gray-700 font-bold mb-2">Upload Thumbnail</label>
-                <input type="file" id="thumbnailFile" name="thumbnailFile" accept="image/*"
-                    class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-            </div>
-
-            <div class="mb-4" id="videoPreviewContainer">
-                <video id="videoPreview" class="w-full rounded-lg mb-4" controls style="display: none;"></video>
-            </div>
-            <div class="mb-4">
-                <label class="block text-gray-700 font-bold mb-2">Upload Progress: <span id="uploadProgress">0%</span></label>
-                <label class="block text-gray-700 font-bold mb-2">Size: <span id="uploadedSize">0</span>/<span id="videoSize">0</span> MB</label>
-                <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div class="bg-blue-500 h-2.5 rounded-full" id="progressBar" style="width: 0%"></div>
+                <label class="block text-gray-700 font-bold mb-2">Upload Video</label>
+                <div id="videoDropZone" class="drop-zone rounded-lg p-6 text-center cursor-pointer">
+                    <p class="text-gray-500 mb-2">Drag & drop video or <span class="text-blue-500 underline">browse</span></p>
+                    <input type="file" id="videoFile" name="videoFile" accept="video/*" class="hidden" required>
+                    <p id="videoFileName" class="text-sm text-gray-600"></p>
                 </div>
             </div>
-            <div class="text-center mb-4">
-                <button type="submit" id="uploadButton" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Upload Video</button>
+
+            <!-- Thumbnail File Drop Zone -->
+            <div class="mb-4">
+                <label class="block text-gray-700 font-bold mb-2">Upload Thumbnail</label>
+                <div id="thumbnailDropZone" class="drop-zone rounded-lg p-6 text-center cursor-pointer">
+                    <p class="text-gray-500 mb-2">Drag & drop image or <span class="text-blue-500 underline">browse</span></p>
+                    <input type="file" id="thumbnailFile" name="thumbnailFile" accept="image/*" class="hidden">
+                    <p id="thumbnailFileName" class="text-sm text-gray-600"></p>
+                </div>
             </div>
-            
+
+            <!-- Preview -->
+            <div class="mb-4">
+                <video id="videoPreview" class="w-full rounded-lg mb-2" controls style="display: none;"></video>
+                <img id="thumbnailPreview" class="w-full rounded-lg mb-2" style="display: none;" alt="Thumbnail preview">
+            </div>
+
+            <!-- Upload Progress -->
+            <div class="mb-4">
+                <label class="block text-gray-700 font-bold mb-2">Upload Progress: <span id="uploadProgress">0%</span></label>
+                <label class="block text-gray-700 font-bold mb-2">Size: <span id="uploadedSize">0</span> / <span id="totalSize">0</span> MB</label>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="bg-blue-500 h-2.5 rounded-full transition-all duration-300" id="progressBar" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div id="uploadStatus" class="mb-4 text-center hidden">
+                <p id="uploadStatusText" class="font-bold"></p>
+            </div>
+
+            <div class="text-center mb-4">
+                <button type="submit" id="uploadButton" class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">Upload Video</button>
+            </div>
         </form>
+
+        <!-- Uploaded Videos List -->
         <div id="videoList" class="mt-8">
             <h3 class="text-xl font-bold mb-4">Uploaded Videos</h3>
             <ul id="videoListContainer" class="space-y-4"></ul>
         </div>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-   <script>
-        var firebaseConfig = {
-            apiKey: "<%= ApiKey %>",
-            authDomain: "<%= AuthDomain %>",
-            databaseURL: "<%=DatabaseURL%>",
-
-            projectId: "<%= ProjectId %>",
-            storageBucket: "<%= StorageBucket %>",
-            messagingSenderId: "<%= MessagingSenderId %>",
-            appId: "<%= AppId %>"
-        };
-        firebase.initializeApp(firebaseConfig);
-
+    <script>
         const uploadForm = document.getElementById('uploadForm');
-        const videoTitle = document.getElementById('videoTitle');
         const videoFileInput = document.getElementById('videoFile');
         const thumbnailFileInput = document.getElementById('thumbnailFile');
         const videoPreview = document.getElementById('videoPreview');
+        const thumbnailPreview = document.getElementById('thumbnailPreview');
         const progressBar = document.getElementById('progressBar');
-        const videoSizeLabel = document.getElementById('videoSize');
+        const totalSizeLabel = document.getElementById('totalSize');
         const uploadedSizeLabel = document.getElementById('uploadedSize');
         const uploadProgressLabel = document.getElementById('uploadProgress');
         const uploadButton = document.getElementById('uploadButton');
         const videoListContainer = document.getElementById('videoListContainer');
-        const videoPreviewContainer = document.getElementById('videoPreviewContainer');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const uploadStatusText = document.getElementById('uploadStatusText');
+        const videoFileName = document.getElementById('videoFileName');
+        const thumbnailFileName = document.getElementById('thumbnailFileName');
 
-        videoFileInput.addEventListener('change', () => {
-            const file = videoFileInput.files[0];
-            if (file) {
-                const url = URL.createObjectURL(file);
-                videoPreview.src = url;
-                videoPreview.style.display = 'block';
-            } else {
-                videoPreview.style.display = 'none';
-            }
-        });
+        // --- Drop Zone Functionality ---
+        function setupDropZone(dropZone, fileInput, previewEl, nameEl, isVideo) {
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                fileInput.files = e.dataTransfer.files;
+                fileInput.dispatchEvent(new Event('change'));
+            });
+            fileInput.addEventListener('change', () => {
+                const file = fileInput.files[0];
+                if (file) {
+                    nameEl.textContent = file.name + ' (' + (file.size / (1024 * 1024)).toFixed(2) + ' MB)';
+                    if (isVideo) {
+                        previewEl.src = URL.createObjectURL(file);
+                        previewEl.style.display = 'block';
+                    } else {
+                        previewEl.src = URL.createObjectURL(file);
+                        previewEl.style.display = 'block';
+                    }
+                } else {
+                    nameEl.textContent = '';
+                    previewEl.style.display = 'none';
+                }
+            });
+        }
 
+        setupDropZone(document.getElementById('videoDropZone'), videoFileInput, videoPreview, videoFileName, true);
+        setupDropZone(document.getElementById('thumbnailDropZone'), thumbnailFileInput, thumbnailPreview, thumbnailFileName, false);
+
+        // --- Upload via XHR for progress tracking ---
         uploadForm.addEventListener('submit', (e) => {
             e.preventDefault();
+
             const videoFile = videoFileInput.files[0];
-            const thumbnailFile = thumbnailFileInput.files[0];
-            if (!videoFile || !thumbnailFile) return;
+            if (!videoFile) {
+                alert('Please select a video file.');
+                return;
+            }
 
-            const videoStorageRef = firebase.storage().ref('videos/' + videoTitle.value + '_' + videoFile.name);
-            const thumbnailStorageRef = firebase.storage().ref('thumbnails/' + videoTitle.value + '_' + thumbnailFile.name);
+            const formData = new FormData(uploadForm);
 
-            const videoUploadTask = videoStorageRef.put(videoFile);
-            const thumbnailUploadTask = thumbnailStorageRef.put(thumbnailFile);
+            // Show progress
+            progressBar.style.width = '0%';
+            uploadProgressLabel.textContent = '0%';
+            uploadedSizeLabel.textContent = '0';
+            totalSizeLabel.textContent = (videoFile.size / (1024 * 1024)).toFixed(2);
+            uploadButton.disabled = true;
+            uploadStatus.classList.remove('hidden');
+            uploadStatusText.textContent = 'Uploading...';
+            uploadStatusText.className = 'font-bold text-blue-500';
 
-            videoUploadTask.on('state_changed', (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                progressBar.style.width = progress + '%';
-                uploadProgressLabel.textContent = progress.toFixed(2) + '%';
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/upload', true);
 
-                const videoSizeMB = (snapshot.totalBytes / (1024 * 1024)).toFixed(2);
-                videoSizeLabel.textContent = videoSizeMB;
-
-                const uploadedSizeMB = (snapshot.bytesTransferred / (1024 * 1024)).toFixed(2);
-                uploadedSizeLabel.textContent = uploadedSizeMB;
-            }, (error) => {
-                console.error('Upload failed:', error);
-            }, () => {
-                videoUploadTask.snapshot.ref.getDownloadURL().then((videoURL) => {
-                    thumbnailUploadTask.snapshot.ref.getDownloadURL().then((thumbnailURL) => {
-                        const videoData = {
-                            title: videoTitle.value,
-                            videoURL: videoURL,
-                            thumbnailURL: thumbnailURL
-                        };
-                        firebase.database().ref('videos').push(videoData);
-                        uploadButton.disabled = false;
-                        addVideoToList(videoData);
-                    });
-                });
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percent = ((e.loaded / e.total) * 100).toFixed(2);
+                    progressBar.style.width = percent + '%';
+                    uploadProgressLabel.textContent = percent + '%';
+                    uploadedSizeLabel.textContent = (e.loaded / (1024 * 1024)).toFixed(2);
+                }
             });
+
+            xhr.addEventListener('load', () => {
+                if (xhr.status === 200) {
+                    const response = JSON.parse(xhr.responseText);
+                    uploadStatusText.textContent = '✅ Upload successful!';
+                    uploadStatusText.className = 'font-bold text-green-500';
+                    progressBar.style.width = '100%';
+                    uploadProgressLabel.textContent = '100%';
+                    addVideoToList(response.data);
+                    uploadForm.reset();
+                    videoPreview.style.display = 'none';
+                    thumbnailPreview.style.display = 'none';
+                    videoFileName.textContent = '';
+                    thumbnailFileName.textContent = '';
+                } else {
+                    let errorMsg = 'Upload failed';
+                    try {
+                        const err = JSON.parse(xhr.responseText);
+                        errorMsg = err.error || errorMsg;
+                    } catch {}
+                    uploadStatusText.textContent = '❌ ' + errorMsg;
+                    uploadStatusText.className = 'font-bold text-red-500';
+                }
+                uploadButton.disabled = false;
+            });
+
+            xhr.addEventListener('error', () => {
+                uploadStatusText.textContent = '❌ Network error. Please try again.';
+                uploadStatusText.className = 'font-bold text-red-500';
+                uploadButton.disabled = false;
+            });
+
+            xhr.send(formData);
         });
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
 
         function addVideoToList(videoData) {
             const li = document.createElement('li');
-            li.className = 'flex items-center space-x-4';
-            li.innerHTML = `
-                <img src="${videoData.thumbnailURL}" class="w-24 h-24 rounded-lg" alt="Thumbnail">
-                <div class="flex-1">
-                    <h4 class="font-bold">${videoData.title}</h4>
-                    <button class="bg-blue-500 text-white px-2 py-1 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500" onclick="copyToClipboard('${videoData.videoURL}')">Copy Link</button>
-                </div>
-            `;
+            li.className = 'bg-gray-50 p-3 rounded-lg';
+            const thumbnailSrc = videoData.thumbnailURL || 'https://via.placeholder.com/96x96?text=No+Thumb';
+            const safeTitle = escapeHtml(videoData.title);
+            const safeVideoURL = escapeHtml(videoData.videoURL);
+            const safeThumbSrc = escapeHtml(thumbnailSrc);
+            li.innerHTML = '<div class="flex items-center space-x-4">' +
+                '<img src="' + safeThumbSrc + '" class="w-24 h-24 rounded-lg object-cover" alt="Thumbnail">' +
+                '<div class="flex-1">' +
+                '<h4 class="font-bold">' + safeTitle + '</h4>' +
+                '<button class="bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-600 mt-2 text-sm" data-url="' + safeVideoURL + '" onclick="copyToClipboard(this.dataset.url)">Copy Link</button>' +
+                '</div></div>';
             videoListContainer.appendChild(li);
         }
 
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
-                alert('Link copied to clipboard');
-            }).catch((err) => {
-                console.error('Could not copy text: ', err);
+                alert('Link copied to clipboard!');
+            }).catch(() => {
+                prompt('Copy this link:', text);
             });
         }
 
+        // Load existing videos on page load
         function loadVideos() {
-            firebase.database().ref('videos').on('value', (snapshot) => {
-                videoListContainer.innerHTML = '';
-                snapshot.forEach((childSnapshot) => {
-                    const videoData = childSnapshot.val();
-                    addVideoToList(videoData);
-                });
-            });
+            videoListContainer.innerHTML = '';
+            fetch('/api/videos')
+                .then(res => res.json())
+                .then(videos => {
+                    videos.forEach(addVideoToList);
+                })
+                .catch(() => {});
         }
 
         loadVideos();
-   </script>
+    </script>
 </body>
 </html>

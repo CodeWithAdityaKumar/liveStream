@@ -7,53 +7,108 @@
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen">
-    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
-        <h2 class="text-2xl font-bold mb-6 text-center">Stream Platform</h2>
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-lg">
+        <h2 class="text-2xl font-bold mb-6 text-center">🎬 Stream Platform</h2>
         
-        <!-- Status Indicator -->
+        <!-- Stream Status Summary -->
         <div class="mb-6 text-center">
-            <% if (isStreaming) { %>
-                <span class="text-green-500 font-bold">Streaming is currently active</span>
+            <% if (runningCount > 0) { %>
+                <span class="text-green-500 font-bold"><%= runningCount %> running stream<%= runningCount !== 1 ? 's' : '' %></span>
             <% } else { %>
-                <span class="text-red-500 font-bold">No active stream</span>
+                <span class="text-red-500 font-bold">No running streams</span>
+            <% } %>
+            <% if (totalCount > runningCount) { %>
+                <span class="text-gray-400 ml-2">(<%= totalCount - runningCount %> stopped)</span>
             <% } %>
         </div>
 
-        <form action="/api/stream/start" method="POST">
+        <!-- All Streams List -->
+        <% if (streams.length > 0) { %>
+            <div class="mb-6">
+                <h3 class="text-lg font-bold mb-3">Streams</h3>
+                <ul class="space-y-3">
+                    <% streams.forEach(stream => { %>
+                        <li class="p-3 rounded-lg flex items-center justify-between <%= stream.status === 'running' ? 'bg-green-50 border border-green-200' : stream.status === 'error' ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-200' %>">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <p class="font-bold text-sm"><%= stream.key %></p>
+                                    <% if (stream.status === 'running') { %>
+                                        <span class="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                        <span class="text-xs text-green-600 font-medium">Running</span>
+                                    <% } else if (stream.status === 'stopped') { %>
+                                        <span class="text-xs text-yellow-600 font-medium">Stopped</span>
+                                    <% } else if (stream.status === 'finished') { %>
+                                        <span class="text-xs text-blue-600 font-medium">Finished</span>
+                                    <% } else if (stream.status === 'error') { %>
+                                        <span class="text-xs text-red-600 font-medium">Error (code: <%= stream.exitCode %>)</span>
+                                    <% } %>
+                                </div>
+                                <p class="text-xs text-gray-500 truncate max-w-xs"><%= stream.videoURL %></p>
+                                <p class="text-xs text-gray-400">Started: <%= stream.startedAt.toLocaleString() %></p>
+                                <% if (stream.stoppedAt) { %>
+                                    <p class="text-xs text-gray-400">Stopped: <%= stream.stoppedAt.toLocaleString() %></p>
+                                <% } %>
+                                <% if (stream.errorMessage) { %>
+                                    <p class="text-xs text-red-400 truncate max-w-xs"><%= stream.errorMessage %></p>
+                                <% } %>
+                            </div>
+                            <div class="ml-4 flex items-center gap-2">
+                                <% if (stream.status === 'running') { %>
+                                    <form action="/api/stream/stop" method="POST" class="inline">
+                                        <input type="hidden" name="StreamKey" value="<%= stream.key %>">
+                                        <input type="text" name="AppStreamKey" placeholder="App Key" class="px-2 py-1 border rounded text-sm w-28" required>
+                                        <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm">Stop</button>
+                                    </form>
+                                <% } else { %>
+                                    <form action="/api/stream/remove" method="POST" class="inline">
+                                        <input type="hidden" name="StreamKey" value="<%= stream.key %>">
+                                        <input type="text" name="AppStreamKey" placeholder="App Key" class="px-2 py-1 border rounded text-sm w-28" required>
+                                        <button type="submit" class="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500 text-sm">Remove</button>
+                                    </form>
+                                <% } %>
+                            </div>
+                        </li>
+                    <% }) %>
+                </ul>
+            </div>
+        <% } %>
+
+        <!-- Start Stream Form -->
+        <form action="/api/stream/start" method="POST" class="mb-6">
+            <h3 class="text-lg font-bold mb-3">Start New Stream</h3>
             <div class="mb-4">
                 <label for="videoURL" class="block text-gray-700 font-bold mb-2">Video URL</label>
-                <input type="url" id="videoURL" name="videoURL" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                <input type="url" id="videoURL" name="videoURL" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://example.com/video.mp4" required>
             </div>
             <div class="mb-4">
-                <label for="streamKey" class="block text-gray-700 font-bold mb-2">Stream Key</label>
-                <input type="text" id="streamKey" name="StreamKey" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                <label for="streamKey" class="block text-gray-700 font-bold mb-2">Stream Key (YouTube RTMP)</label>
+                <input type="text" id="streamKey" name="StreamKey" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="xxxx-xxxx-xxxx-xxxx" required>
             </div>
             <div class="mb-4">
                 <label for="appStreamKey" class="block text-gray-700 font-bold mb-2">App Stream Key</label>
                 <input type="text" id="appStreamKey" name="AppStreamKey" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
             </div>
             <div class="mb-4">
-                <span class="block text-gray-700 font-bold mb-2">Is Loop</span>
+                <span class="block text-gray-700 font-bold mb-2">Loop Video?</span>
                 <div class="flex items-center">
-                    <input type="radio" id="isLoopYes" name="isLoop" value="yes" class="mr-2">
+                    <input type="radio" id="isLoopYes" name="loop" value="yes" class="mr-2">
                     <label for="isLoopYes" class="mr-4">Yes</label>
-                    <input type="radio" id="isLoopNo" name="isLoop" value="no" class="mr-2">
+                    <input type="radio" id="isLoopNo" name="loop" value="no" class="mr-2" checked>
                     <label for="isLoopNo">No</label>
                 </div>
             </div>
             <div class="text-center">
-                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Start Stream</button>
+                <button type="submit" class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Start Stream</button>
             </div>
         </form>
-        <form action="/api/stream/stop" method="POST" class="mt-4">
-            <div class="mb-4">
-                <label for="stopKey" class="block text-gray-700 font-bold mb-2">Stop Key</label>
-                <input type="text" id="stopKey" name="AppStreamKey" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-            </div>
-            <div class="text-center">
-                <button type="submit" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500">Stop Stream</button>
-            </div>
-        </form>
+
+        <!-- Stop All Running Streams -->
+        <% if (runningCount > 0) { %>
+            <form action="/api/stream/stop" method="POST" class="text-center">
+                <input type="text" name="AppStreamKey" placeholder="App Key" class="px-3 py-2 border rounded-lg mr-2 w-48" required>
+                <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700">Stop All Streams</button>
+            </form>
+        <% } %>
     </div>
 </body>
 </html>
