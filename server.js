@@ -1,8 +1,5 @@
 import express from 'express';
 import { spawn } from 'child_process';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import multer from 'multer';
 import cloudinary from 'cloudinary';
@@ -11,8 +8,6 @@ import { CloudinaryStorage } from 'multer-storage-cloudinary';
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Cloudinary configuration
 const cloudinaryConfigured = process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET;
@@ -222,7 +217,15 @@ app.get('/', (_, res) => {
 });
 
 app.get('/pages/upload', (_, res) => {
-  res.render('Upload');
+  res.render('Upload', {
+    firebaseApiKey: process.env.FIREBASE_API_KEY,
+    firebaseAuthDomain: process.env.FIREBASE_AUTH_DOMAIN,
+    firebaseDatabaseURL: process.env.FIREBASE_DATABASE_URL,
+    firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
+    firebaseStorageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+    firebaseMessagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+    firebaseAppId: process.env.FIREBASE_APP_ID,
+  });
 });
 
 app.get('/pages/stream', (_, res) => {
@@ -243,37 +246,8 @@ app.get('/pages/stream', (_, res) => {
   res.render('Home', { streams, runningCount, totalCount: streams.length });
 });
 
-// --- Video Metadata Persistence ---
-const VIDEOS_FILE = path.join(__dirname, 'data', 'videos.json');
-
-function loadVideos() {
-  try {
-    if (!fs.existsSync(VIDEOS_FILE)) {
-      fs.writeFileSync(VIDEOS_FILE, '[]', 'utf-8');
-    }
-    const raw = fs.readFileSync(VIDEOS_FILE, 'utf-8');
-    try {
-      return JSON.parse(raw);
-    } catch {
-      // Corrupted JSON, reset file
-      fs.writeFileSync(VIDEOS_FILE, '[]', 'utf-8');
-      return [];
-    }
-  } catch {
-    return [];
-  }
-}
-
-function saveVideos(videos) {
-  fs.writeFileSync(VIDEOS_FILE, JSON.stringify(videos, null, 2), 'utf-8');
-}
-
 // --- Upload API (Cloudinary) ---
-
-app.get('/api/videos', (_, res) => {
-  const videos = loadVideos();
-  res.json(videos);
-});
+// Files upload to Cloudinary (server-side), metadata saved to Firebase Realtime Database (browser-side)
 
 app.post('/api/upload', (req, res, next) => {
   if (!cloudinaryConfigured) {
@@ -292,12 +266,6 @@ app.post('/api/upload', (req, res, next) => {
       return res.status(500).json({ error: err.message || 'Upload failed' });
     }
 
-    const { videoTitle } = req.body;
-
-    if (!videoTitle || videoTitle.trim().length === 0) {
-      return res.status(400).json({ error: 'Video title is required.' });
-    }
-
     if (!req.files || !req.files.videoFile) {
       return res.status(400).json({ error: 'Video file is required.' });
     }
@@ -308,21 +276,10 @@ app.post('/api/upload', (req, res, next) => {
         ? req.files.thumbnailFile[0].path
         : null;
 
-      const videoData = {
-        title: videoTitle.trim(),
-        videoURL,
-        thumbnailURL,
-        createdAt: new Date().toISOString(),
-      };
-
-      const videos = loadVideos();
-      videos.push(videoData);
-      saveVideos(videos);
-
       res.json({
         success: true,
         message: 'Upload successful',
-        data: videoData,
+        data: { videoURL, thumbnailURL },
       });
     } catch (err) {
       console.error('[Upload] Processing error:', err.message);

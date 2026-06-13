@@ -76,7 +76,23 @@
         </div>
     </div>
 
+    <!-- Firebase SDK (compat mode for simplicity) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
     <script>
+        // Initialize Firebase
+        var firebaseConfig = {
+            apiKey: "<%= firebaseApiKey %>",
+            authDomain: "<%= firebaseAuthDomain %>",
+            databaseURL: "<%= firebaseDatabaseURL %>",
+            projectId: "<%= firebaseProjectId %>",
+            storageBucket: "<%= firebaseStorageBucket %>",
+            messagingSenderId: "<%= firebaseMessagingSenderId %>",
+            appId: "<%= firebaseAppId %>"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
         const uploadForm = document.getElementById('uploadForm');
         const videoFileInput = document.getElementById('videoFile');
         const thumbnailFileInput = document.getElementById('thumbnailFile');
@@ -113,13 +129,9 @@
                 const file = fileInput.files[0];
                 if (file) {
                     nameEl.textContent = file.name + ' (' + (file.size / (1024 * 1024)).toFixed(2) + ' MB)';
-                    if (isVideo) {
-                        previewEl.src = URL.createObjectURL(file);
-                        previewEl.style.display = 'block';
-                    } else {
-                        previewEl.src = URL.createObjectURL(file);
-                        previewEl.style.display = 'block';
-                    }
+                    const url = URL.createObjectURL(file);
+                    previewEl.src = url;
+                    previewEl.style.display = 'block';
                 } else {
                     nameEl.textContent = '';
                     previewEl.style.display = 'none';
@@ -130,7 +142,7 @@
         setupDropZone(document.getElementById('videoDropZone'), videoFileInput, videoPreview, videoFileName, true);
         setupDropZone(document.getElementById('thumbnailDropZone'), thumbnailFileInput, thumbnailPreview, thumbnailFileName, false);
 
-        // --- Upload via XHR for progress tracking ---
+        // --- Upload via XHR for progress tracking, then save metadata to Firebase ---
         uploadForm.addEventListener('submit', (e) => {
             e.preventDefault();
 
@@ -149,7 +161,7 @@
             totalSizeLabel.textContent = (videoFile.size / (1024 * 1024)).toFixed(2);
             uploadButton.disabled = true;
             uploadStatus.classList.remove('hidden');
-            uploadStatusText.textContent = 'Uploading...';
+            uploadStatusText.textContent = 'Uploading to Cloudinary...';
             uploadStatusText.className = 'font-bold text-blue-500';
 
             const xhr = new XMLHttpRequest();
@@ -167,16 +179,37 @@
             xhr.addEventListener('load', () => {
                 if (xhr.status === 200) {
                     const response = JSON.parse(xhr.responseText);
-                    uploadStatusText.textContent = '✅ Upload successful!';
-                    uploadStatusText.className = 'font-bold text-green-500';
-                    progressBar.style.width = '100%';
-                    uploadProgressLabel.textContent = '100%';
-                    addVideoToList(response.data);
-                    uploadForm.reset();
-                    videoPreview.style.display = 'none';
-                    thumbnailPreview.style.display = 'none';
-                    videoFileName.textContent = '';
-                    thumbnailFileName.textContent = '';
+                    const videoTitle = document.getElementById('videoTitle').value.trim();
+
+                    uploadStatusText.textContent = 'Saving to Firebase...';
+                    uploadStatusText.className = 'font-bold text-blue-500';
+
+                    // Save metadata to Firebase Realtime Database
+                    const videoData = {
+                        title: videoTitle,
+                        videoURL: response.data.videoURL,
+                        thumbnailURL: response.data.thumbnailURL,
+                        createdAt: new Date().toISOString()
+                    };
+
+                    db.ref('videos').push(videoData)
+                        .then(() => {
+                            uploadStatusText.textContent = '✅ Upload successful!';
+                            uploadStatusText.className = 'font-bold text-green-500';
+                            progressBar.style.width = '100%';
+                            uploadProgressLabel.textContent = '100%';
+                            addVideoToList(videoData);
+                            uploadForm.reset();
+                            videoPreview.style.display = 'none';
+                            thumbnailPreview.style.display = 'none';
+                            videoFileName.textContent = '';
+                            thumbnailFileName.textContent = '';
+                        })
+                        .catch((error) => {
+                            console.error('Firebase save error:', error);
+                            uploadStatusText.textContent = '❌ Failed to save metadata: ' + error.message;
+                            uploadStatusText.className = 'font-bold text-red-500';
+                        });
                 } else {
                     let errorMsg = 'Upload failed';
                     try {
@@ -228,15 +261,16 @@
             });
         }
 
-        // Load existing videos on page load
+        // Load existing videos from Firebase Realtime Database
         function loadVideos() {
             videoListContainer.innerHTML = '';
-            fetch('/api/videos')
-                .then(res => res.json())
-                .then(videos => {
-                    videos.forEach(addVideoToList);
-                })
-                .catch(() => {});
+            db.ref('videos').orderByChild('createdAt').on('value', (snapshot) => {
+                videoListContainer.innerHTML = '';
+                snapshot.forEach((childSnapshot) => {
+                    const videoData = childSnapshot.val();
+                    addVideoToList(videoData);
+                });
+            });
         }
 
         loadVideos();
